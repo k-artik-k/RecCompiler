@@ -88,12 +88,10 @@
             e.preventDefault();
             compileAndRun();
         }
-        // Ctrl+S to save
         if (e.ctrlKey && e.key === 's') {
             e.preventDefault();
             document.getElementById('btn-save').click();
         }
-        // Ctrl+O to open
         if (e.ctrlKey && e.key === 'o') {
             e.preventDefault();
             document.getElementById('btn-open').click();
@@ -113,118 +111,73 @@
         statusText.textContent = 'Compiling...';
         consolePanel.showOutput();
 
-        // Use setTimeout to allow UI to update
+        // Gather any queued input values for scan()
+        const inputValues = consolePanel.inputQueue.splice(0);
+
+        // Use setTimeout to let UI update before running
         setTimeout(() => {
-            try {
-                const startTime = performance.now();
+            const startTime = performance.now();
 
-                // Phase 1: Lexical Analysis
-                consolePanel.log('▸ Phase 1: Lexical Analysis...', 'dim');
-                let tokens;
-                try {
-                    tokens = window.compiler.tokenizeAll(source);
-                    consolePanel.log(`  ${tokens.length} tokens generated`, 'dim');
-                    visualizer.renderTokens(tokens);
-                } catch (e) {
-                    handleError(e);
-                    return;
-                }
+            const result = window.compiler.compileAndRun(source, inputValues);
+            const elapsed = (performance.now() - startTime).toFixed(1);
 
-                // Phase 2: Parsing
-                consolePanel.log('▸ Phase 2: Parsing (AST)...', 'dim');
-                let ast;
-                try {
-                    const lexer = new window.compiler.Lexer(source);
-                    ast = window.compiler.parse(lexer);
-                    consolePanel.log('  Syntax tree built', 'dim');
-                    visualizer.renderAST(ast);
-                } catch (e) {
-                    handleError(e);
-                    return;
-                }
-
-                // Phase 3: Compilation
-                consolePanel.log('▸ Phase 3: Bytecode Compilation...', 'dim');
-                let program, semanticInfo;
-                try {
-                    const result = window.compiler.compile(ast);
-                    program = result.program;
-                    semanticInfo = result.semanticInfo;
-                    const instructions = window.compiler.disassemble(program);
-                    consolePanel.log(`  ${program.count} bytecodes emitted`, 'dim');
-                    visualizer.renderBytecode(instructions, semanticInfo);
-                } catch (e) {
-                    handleError(e);
-                    return;
-                }
-
-                // Phase 4: Execution
-                consolePanel.log('▸ Phase 4: Execution...', 'dim');
-                try {
-                    const funcTable = semanticInfo.functions.map(f => ({
-                        name: f.name,
-                        address: f.address,
-                        nParams: f.params.length,
-                    }));
-
-                    const execResult = window.compiler.vmExecute(program, {
-                        onOutput: (val) => {
-                            consolePanel.log(String(val), 'output');
-                        },
-                        onInput: () => {
-                            return consolePanel.getInput();
-                        },
-                        onCall: () => {},
-                        onReturn: () => {},
-                        funcTable,
-                    });
-
-                    const elapsed = (performance.now() - startTime).toFixed(1);
-
-                    visualizer.renderExecution(execResult);
-
-                    consolePanel.log('', 'dim');
-                    consolePanel.log(`✓ Execution complete (${elapsed}ms, ${execResult.stepCount} steps)`, 'success');
-
-                    if (execResult.exitCode !== 0) {
-                        consolePanel.log(`  Exit code: ${execResult.exitCode}`, 'dim');
-                    }
-
-                    compileBtn.className = 'compile-btn success';
-                    statusText.textContent = `Done (${elapsed}ms)`;
-
-                    // Reset button style after 2s
-                    setTimeout(() => {
-                        compileBtn.className = 'compile-btn';
-                        statusText.textContent = 'Ready';
-                    }, 2000);
-
-                } catch (e) {
-                    handleError(e);
-                    return;
-                }
-
-            } catch (e) {
-                handleError(e);
+            // Phase 1: Tokens
+            if (result.tokens) {
+                consolePanel.log(`▸ Lexical Analysis — ${result.tokens.length} tokens`, 'dim');
+                visualizer.renderTokens(result.tokens);
             }
-        }, 50);
-    }
 
-    function handleError(e) {
-        consolePanel.log('', 'dim');
-        consolePanel.log(`✗ ${e.message}`, 'error');
+            // Phase 2: AST
+            if (result.ast) {
+                consolePanel.log('▸ Parsing — syntax tree built', 'dim');
+                visualizer.renderAST(result.ast);
+            }
 
-        if (e.line && e.line > 0) {
-            editor.setErrorLine(e.line);
-        }
+            // Phase 3: Bytecode
+            if (result.bytecode) {
+                consolePanel.log(`▸ Compilation — ${result.bytecode.length} instructions`, 'dim');
+                visualizer.renderBytecode(result.bytecode, result.semanticInfo);
+            }
 
-        compileBtn.className = 'compile-btn error';
-        statusText.textContent = 'Error';
+            // Phase 4: Execution
+            if (result.execution) {
+                consolePanel.log('▸ Execution', 'dim');
 
-        setTimeout(() => {
-            compileBtn.className = 'compile-btn';
-            statusText.textContent = 'Ready';
-        }, 3000);
+                // Print outputs
+                result.execution.outputs.forEach(val => {
+                    consolePanel.log(String(val), 'output');
+                });
+
+                visualizer.renderExecution(result.execution);
+                visualizer.switchTab('execution');
+
+                consolePanel.log('', 'dim');
+                consolePanel.log(`✓ Done in ${elapsed}ms (${result.execution.stepCount} steps, depth ${result.execution.maxRecursionDepth})`, 'success');
+
+                compileBtn.className = 'compile-btn success';
+                statusText.textContent = `Done (${elapsed}ms)`;
+            }
+
+            // Error handling
+            if (result.error) {
+                consolePanel.log('', 'dim');
+                consolePanel.log(`✗ ${result.error.message}`, 'error');
+
+                if (result.error.line > 0) {
+                    editor.setErrorLine(result.error.line);
+                }
+
+                compileBtn.className = 'compile-btn error';
+                statusText.textContent = 'Error';
+            }
+
+            // Reset button after delay
+            setTimeout(() => {
+                compileBtn.className = 'compile-btn';
+                if (!result.error) statusText.textContent = 'Ready';
+            }, result.error ? 3000 : 2000);
+
+        }, 30);
     }
 
     function updateFileName(filePath) {
@@ -243,14 +196,14 @@
     function setupResizeH() {
         const handle = document.getElementById('editor-console-resize');
         const editorPanel = document.getElementById('editor-panel');
-        const consolePanel = document.getElementById('console-panel');
+        const consolePanelEl = document.getElementById('console-panel');
         let startY, startEditorH, startConsoleH;
 
         handle.addEventListener('mousedown', (e) => {
             e.preventDefault();
             startY = e.clientY;
             startEditorH = editorPanel.offsetHeight;
-            startConsoleH = consolePanel.offsetHeight;
+            startConsoleH = consolePanelEl.offsetHeight;
             handle.classList.add('active');
 
             const onMove = (e) => {
@@ -259,7 +212,7 @@
                 const newConsoleH = Math.max(80, startConsoleH - dy);
                 editorPanel.style.flex = 'none';
                 editorPanel.style.height = newEditorH + 'px';
-                consolePanel.style.height = newConsoleH + 'px';
+                consolePanelEl.style.height = newConsoleH + 'px';
             };
 
             const onUp = () => {
@@ -304,7 +257,7 @@
     // ── Initial state ─────────────────────────────────
     editor.focus();
     consolePanel.log('RecCompiler Desktop v2.0', 'dim');
-    consolePanel.log('Press Ctrl+Enter or F5 to compile and run', 'dim');
+    consolePanel.log('Press Ctrl+Enter or F5 to compile & run', 'dim');
     consolePanel.log('', 'dim');
 
 })();

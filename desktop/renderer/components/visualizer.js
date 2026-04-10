@@ -3,6 +3,41 @@
  * Tokens, AST, Bytecode, and Execution (with call stack).
  */
 
+// Inline constants so we don't rely on window.compiler (context bridge limitation)
+const _NODE_LABELS = {
+    'NODE_PROGRAM':   'Program',
+    'NODE_FUNC_DEF':  'FuncDef',
+    'NODE_BLOCK':     'Block',
+    'NODE_VAR_DECL':  'VarDecl',
+    'NODE_IF':        'If',
+    'NODE_WHILE':     'While',
+    'NODE_FOR':       'For',
+    'NODE_RETURN':    'Return',
+    'NODE_EXPR_STMT': 'ExprStmt',
+    'NODE_ASSIGN':    'Assign',
+    'NODE_BINARY':    'Binary',
+    'NODE_UNARY':     'Unary',
+    'NODE_CALL':      'Call',
+    'NODE_NUMBER':    'Number',
+    'NODE_IDENT':     'Ident',
+};
+
+const _TOKEN_NAMES = {
+    'TOKEN_INT': 'int', 'TOKEN_VOID': 'void', 'TOKEN_IF': 'if',
+    'TOKEN_ELSE': 'else', 'TOKEN_WHILE': 'while', 'TOKEN_FOR': 'for',
+    'TOKEN_RETURN': 'return', 'TOKEN_NUMBER': 'number', 'TOKEN_IDENT': 'identifier',
+    'TOKEN_PLUS': '+', 'TOKEN_MINUS': '-', 'TOKEN_STAR': '*',
+    'TOKEN_SLASH': '/', 'TOKEN_PERCENT': '%', 'TOKEN_ASSIGN': '=',
+    'TOKEN_EQ': '==', 'TOKEN_NEQ': '!=', 'TOKEN_LT': '<',
+    'TOKEN_GT': '>', 'TOKEN_LTE': '<=', 'TOKEN_GTE': '>=',
+    'TOKEN_AND': '&&', 'TOKEN_OR': '||', 'TOKEN_NOT': '!',
+    'TOKEN_LPAREN': '(', 'TOKEN_RPAREN': ')', 'TOKEN_LBRACE': '{',
+    'TOKEN_RBRACE': '}', 'TOKEN_SEMI': ';', 'TOKEN_COMMA': ',',
+    'TOKEN_EOF': 'end of file', 'TOKEN_ERROR': 'error',
+};
+
+function _tokenTypeName(t) { return _TOKEN_NAMES[t] || '?'; }
+
 class Visualizer {
     constructor() {
         this.tabs = document.querySelectorAll('.viz-tab');
@@ -140,18 +175,16 @@ class Visualizer {
     }
 
     getASTLabel(node) {
-        const { NODE_LABELS } = window.compiler;
-        return NODE_LABELS[node.type] || node.type;
+        return _NODE_LABELS[node.type] || node.type;
     }
 
     getASTDetail(node) {
-        const { tokenTypeName } = window.compiler;
         const parts = [];
 
         if (node.name) parts.push(`"${node.name}"`);
         if (node.type === 'NODE_NUMBER') parts.push(String(node.int_value));
-        if (node.op) parts.push(tokenTypeName(node.op));
-        if (node.data_type) parts.push(`type:${tokenTypeName(node.data_type)}`);
+        if (node.op) parts.push(_tokenTypeName(node.op));
+        if (node.data_type) parts.push(`type:${_tokenTypeName(node.data_type)}`);
 
         return parts.length > 0 ? parts.join(' · ') : '';
     }
@@ -183,7 +216,6 @@ class Visualizer {
     // ── Bytecode ─────────────────────────────────────
     renderBytecode(instructions, semanticInfo) {
         const el = this.contents.bytecode;
-        const { OpCode } = window.compiler;
 
         // Build address-to-function map
         const addrToFunc = {};
@@ -220,15 +252,15 @@ class Visualizer {
     }
 
     getOpCategory(op) {
-        const { OpCode } = window.compiler;
-        if (op === OpCode.OP_CONST || op === OpCode.OP_POP) return 'op-stack';
-        if (op >= OpCode.OP_ADD && op <= OpCode.OP_NEG) return 'op-arith';
-        if (op >= OpCode.OP_EQ && op <= OpCode.OP_NOT) return 'op-cmp';
-        if (op === OpCode.OP_LOAD || op === OpCode.OP_STORE) return 'op-var';
-        if (op === OpCode.OP_JMP || op === OpCode.OP_JZ) return 'op-flow';
-        if (op === OpCode.OP_CALL || op === OpCode.OP_RET || op === OpCode.OP_ENTER) return 'op-func';
-        if (op === OpCode.OP_PRINT || op === OpCode.OP_SCAN) return 'op-io';
-        if (op === OpCode.OP_HALT) return 'op-halt';
+        // Numeric opcode values matching compiler.js
+        if (op === 0 || op === 1) return 'op-stack';      // CONST, POP
+        if (op >= 2 && op <= 7) return 'op-arith';        // ADD..NEG
+        if (op >= 8 && op <= 16) return 'op-cmp';         // EQ..NOT
+        if (op === 17 || op === 18) return 'op-var';      // LOAD, STORE
+        if (op === 19 || op === 20) return 'op-flow';     // JMP, JZ
+        if (op >= 21 && op <= 23) return 'op-func';       // CALL, RET, ENTER
+        if (op === 24 || op === 25) return 'op-io';       // PRINT, SCAN
+        if (op === 26) return 'op-halt';                   // HALT
         return '';
     }
 
