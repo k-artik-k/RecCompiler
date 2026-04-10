@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RecCompiler</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- ── Custom Titlebar ──────────────────────────── -->
+    <header id="titlebar">
+        <div class="titlebar-drag">
+            <span class="titlebar-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="4 17 10 11 4 5"></polyline>
+                    <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+            </span>
+            <span class="titlebar-title">RecCompiler</span>
+            <span class="titlebar-subtitle" id="file-name">untitled.c</span>
+        </div>
+        <div class="titlebar-controls">
+            <button class="titlebar-btn" id="btn-minimize" title="Minimize">
+                <svg width="12" height="12" viewBox="0 0 12 12"><rect y="5" width="12" height="1.5" fill="currentColor"/></svg>
+            </button>
+            <button class="titlebar-btn" id="btn-maximize" title="Maximize">
+                <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+            </button>
+            <button class="titlebar-btn btn-close" id="btn-close" title="Close">
+                <svg width="12" height="12" viewBox="0 0 12 12"><line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5"/><line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- ── Toolbar ──────────────────────────────────── -->
+    <div id="toolbar">
+        <div class="toolbar-left">
+            <button class="tool-btn" id="btn-open" title="Open File">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <span>Open</span>
+            </button>
+            <button class="tool-btn" id="btn-save" title="Save File">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                <span>Save</span>
+            </button>
+            <div class="toolbar-sep"></div>
+            <div class="example-dropdown">
+                <button class="tool-btn" id="btn-examples">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span>Examples</span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="dropdown-menu" id="examples-menu">
+                    <button data-file="factorial.c">Factorial</button>
+                    <button data-file="fibonacci.c">Fibonacci</button>
+                    <button data-file="mutual_recursion.c">Mutual Recursion</button>
+                </div>
+            </div>
+        </div>
+        <div class="toolbar-center">
+            <button class="compile-btn" id="btn-compile">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Compile & Run</span>
+            </button>
+        </div>
+        <div class="toolbar-right">
+            <span class="status-text" id="status-text">Ready</span>
+        </div>
+    </div>
+
+    <!-- ── Main Content ─────────────────────────────── -->
+    <main id="main-content">
+        <!-- Left Panel: Editor + Console -->
+        <div id="left-panel">
+            <!-- Code Editor -->
+            <div id="editor-panel">
+                <div class="panel-header">
+                    <span class="panel-label">Editor</span>
+                    <span class="panel-info" id="editor-info">Ln 1, Col 1</span>
+                </div>
+                <div id="editor-container">
+                    <div id="line-numbers"></div>
+                    <textarea id="code-editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+                    <div id="highlight-overlay"></div>
+                </div>
+            </div>
+
+            <!-- Resize Handle (horizontal) -->
+            <div class="resize-handle-h" id="editor-console-resize"></div>
+
+            <!-- Console / Terminal -->
+            <div id="console-panel">
+                <div class="panel-header">
+                    <div class="console-tabs">
+                        <button class="console-tab active" data-tab="output">Output</button>
+                        <button class="console-tab" data-tab="terminal">Terminal</button>
+                    </div>
+                    <button class="panel-action" id="btn-clear-console" title="Clear">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <div id="console-output" class="console-content active"></div>
+                <div id="console-terminal" class="console-content">
+                    <div id="terminal-history"></div>
+                    <div id="terminal-input-line">
+                        <span class="terminal-prompt">›</span>
+                        <input type="text" id="terminal-input" placeholder="Enter input for scan()..." autocomplete="off" spellcheck="false">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resize Handle (vertical) -->
+        <div class="resize-handle-v" id="panel-resize"></div>
+
+        <!-- Right Panel: Visualizer -->
+        <div id="right-panel">
+            <div class="panel-header">
+                <div class="viz-tabs">
+                    <button class="viz-tab active" data-tab="tokens">Tokens</button>
+                    <button class="viz-tab" data-tab="ast">AST</button>
+                    <button class="viz-tab" data-tab="bytecode">Bytecode</button>
+                    <button class="viz-tab" data-tab="execution">Execution</button>
+                </div>
+            </div>
+            <div id="viz-tokens" class="viz-content active">
+                <div class="viz-empty">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <p>Compile to see lexical tokens</p>
+                </div>
+            </div>
+            <div id="viz-ast" class="viz-content">
+                <div class="viz-empty">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <p>Compile to see syntax tree</p>
+                </div>
+            </div>
+            <div id="viz-bytecode" class="viz-content">
+                <div class="viz-empty">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <p>Compile to see bytecode</p>
+                </div>
+            </div>
+            <div id="viz-execution" class="viz-content">
+                <div class="viz-empty">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <p>Run to see execution & call stack</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="components/editor.js"></script>
+    <script src="components/console.js"></script>
+    <script src="components/visualizer.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
