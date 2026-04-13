@@ -1,16 +1,9 @@
 /**
  * preload.js — Context bridge for renderer.
- * Must wrap all compiler calls as plain functions since contextBridge
- * cannot transfer class constructors across the isolation boundary.
  */
 const { contextBridge, ipcRenderer } = require('electron');
 
-const { Lexer, tokenizeAll, tokenTypeName, tokenCategory, CompileError } = require('./compiler/lexer');
-const { NodeType, ASTNode, NODE_LABELS } = require('./compiler/ast');
-const { parse } = require('./compiler/parser');
-const { OpCode, opName, compile, disassemble } = require('./compiler/compiler');
-const { vmExecute, VMError } = require('./compiler/vm');
-
+// Window controls API
 contextBridge.exposeInMainWorld('electronAPI', {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     maximize: () => ipcRenderer.invoke('window:maximize'),
@@ -20,23 +13,79 @@ contextBridge.exposeInMainWorld('electronAPI', {
     loadExample: (name) => ipcRenderer.invoke('file:loadExample', name),
 });
 
+// Load compiler modules with error catching
+let Lexer, tokenizeAll, tokenTypeName, CompileError;
+let NodeType, ASTNode, NODE_LABELS;
+let parseFn;
+let OpCode, opName, compileFn, disassemble;
+let vmExecute;
+
+try {
+    const lexerMod = require('./compiler/lexer');
+    Lexer = lexerMod.Lexer;
+    tokenizeAll = lexerMod.tokenizeAll;
+    tokenTypeName = lexerMod.tokenTypeName;
+    CompileError = lexerMod.CompileError;
+    console.log('[preload] lexer loaded OK');
+} catch (e) {
+    console.error('[preload] FAILED to load lexer:', e.message);
+}
+
+try {
+    const astMod = require('./compiler/ast');
+    NodeType = astMod.NodeType;
+    ASTNode = astMod.ASTNode;
+    NODE_LABELS = astMod.NODE_LABELS;
+    console.log('[preload] ast loaded OK');
+} catch (e) {
+    console.error('[preload] FAILED to load ast:', e.message);
+}
+
+try {
+    const parserMod = require('./compiler/parser');
+    parseFn = parserMod.parse;
+    console.log('[preload] parser loaded OK');
+} catch (e) {
+    console.error('[preload] FAILED to load parser:', e.message);
+}
+
+try {
+    const compilerMod = require('./compiler/compiler');
+    OpCode = compilerMod.OpCode;
+    opName = compilerMod.opName;
+    compileFn = compilerMod.compile;
+    disassemble = compilerMod.disassemble;
+    console.log('[preload] compiler loaded OK');
+} catch (e) {
+    console.error('[preload] FAILED to load compiler:', e.message);
+}
+
+try {
+    const vmMod = require('./compiler/vm');
+    vmExecute = vmMod.vmExecute;
+    console.log('[preload] vm loaded OK');
+} catch (e) {
+    console.error('[preload] FAILED to load vm:', e.message);
+}
+
+const allLoaded = Lexer && tokenizeAll && parseFn && compileFn && vmExecute;
+console.log('[preload] all modules loaded:', allLoaded);
+
 /**
- * Expose compiler as plain function wrappers.
- * contextBridge strips class prototypes, so we serialize everything.
+ * Expose compiler pipeline.
+ * Returns JSON string to avoid contextBridge structured-clone issues.
  */
 contextBridge.exposeInMainWorld('compiler', {
-    // Constants (plain objects pass through fine)
-    NODE_LABELS: { ...NODE_LABELS },
+    ready: allLoaded ? true : false,
 
-    // Utility functions
-    tokenTypeName: (t) => tokenTypeName(t),
-    opName: (op) => opName(op),
+    compileAndRun: (source, inputValuesJSON) => {
+        if (!allLoaded) {
+            return JSON.stringify({
+                error: { message: 'Compiler modules failed to load. Check DevTools console.', line: -1 }
+            });
+        }
 
-    /**
-     * Full compile-and-run pipeline.
-     * Returns a plain serializable result object.
-     */
-    compileAndRun: (source, inputValues) => {
+        const inputValues = inputValuesJSON ? JSON.parse(inputValuesJSON) : [];
         const result = {
             tokens: null,
             ast: null,
@@ -44,35 +93,33 @@ contextBridge.exposeInMainWorld('compiler', {
             semanticInfo: null,
             execution: null,
             error: null,
-            errorPhase: null,
         };
 
         try {
             // Phase 1: Tokenize
             result.tokens = tokenizeAll(source);
 
-            // Phase 2: Parse
+            // Phase 2: Parse (needs a fresh lexer instance)
             const lexer = new Lexer(source);
-            const ast = parse(lexer);
+            const ast = parseFn(lexer);
             result.ast = astToPlain(ast);
 
             // Phase 3: Compile
-            const { program, semanticInfo } = compile(ast);
-            result.bytecode = disassemble(program);
-            result.semanticInfo = JSON.parse(JSON.stringify(semanticInfo));
+            const compiled = compileFn(ast);
+            result.bytecode = disassemble(compiled.program);
+            result.semanticInfo = JSON.parse(JSON.stringify(compiled.semanticInfo));
 
             // Phase 4: Execute
-            const funcTable = semanticInfo.functions.map(f => ({
+            const funcTable = compiled.semanticInfo.functions.map(f => ({
                 name: f.name,
                 address: f.address,
                 nParams: f.params.length,
             }));
 
             let inputIdx = 0;
-            const outputs = [];
 
-            const execResult = vmExecute(program, {
-                onOutput: (val) => { outputs.push(val); },
+            const execResult = vmExecute(compiled.program, {
+                onOutput: () => {},
                 onInput: () => {
                     if (inputValues && inputIdx < inputValues.length) {
                         return inputValues[inputIdx++];
@@ -94,55 +141,35 @@ contextBridge.exposeInMainWorld('compiler', {
 
         } catch (e) {
             result.error = {
-                message: e.message,
+                message: e.message || String(e),
                 line: e.line || -1,
-                name: e.name || 'Error',
             };
-            // Determine which phase failed
-            if (!result.tokens) result.errorPhase = 'lexer';
-            else if (!result.ast) result.errorPhase = 'parser';
-            else if (!result.bytecode) result.errorPhase = 'compiler';
-            else result.errorPhase = 'vm';
         }
 
-        return result;
-    },
-
-    /**
-     * Tokenize only (for quick visualization without full compile).
-     */
-    tokenize: (source) => {
-        try {
-            return { tokens: tokenizeAll(source), error: null };
-        } catch (e) {
-            return { tokens: null, error: { message: e.message, line: e.line || -1 } };
-        }
+        return JSON.stringify(result);
     },
 });
 
+console.log('[preload] contextBridge exposed OK');
+
 /**
- * Convert AST node tree to a plain JSON-serializable object.
+ * Convert AST to plain serializable object.
  */
 function astToPlain(node) {
     if (!node) return null;
-
-    const obj = {
-        type: node.type,
-        line: node.line,
-        int_value: node.int_value,
-        name: node.name,
-        op: node.op,
-        data_type: node.data_type,
-        cond: astToPlain(node.cond),
-        body: astToPlain(node.body),
-        else_body: astToPlain(node.else_body),
-        init: astToPlain(node.init),
-        update: astToPlain(node.update),
-        expr: astToPlain(node.expr),
-        left: astToPlain(node.left),
-        right: astToPlain(node.right),
-        items: node.items ? node.items.map(i => astToPlain(i)) : [],
-    };
-
+    const obj = { type: node.type, line: node.line };
+    if (node.int_value !== 0 || node.type === 'NODE_NUMBER') obj.int_value = node.int_value;
+    if (node.name) obj.name = node.name;
+    if (node.op) obj.op = node.op;
+    if (node.data_type) obj.data_type = node.data_type;
+    if (node.cond) obj.cond = astToPlain(node.cond);
+    if (node.body) obj.body = astToPlain(node.body);
+    if (node.else_body) obj.else_body = astToPlain(node.else_body);
+    if (node.init) obj.init = astToPlain(node.init);
+    if (node.update) obj.update = astToPlain(node.update);
+    if (node.expr) obj.expr = astToPlain(node.expr);
+    if (node.left) obj.left = astToPlain(node.left);
+    if (node.right) obj.right = astToPlain(node.right);
+    if (node.items && node.items.length > 0) obj.items = node.items.map(i => astToPlain(i));
     return obj;
 }

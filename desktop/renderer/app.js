@@ -114,70 +114,107 @@
         // Gather any queued input values for scan()
         const inputValues = consolePanel.inputQueue.splice(0);
 
-        // Use setTimeout to let UI update before running
-        setTimeout(() => {
-            const startTime = performance.now();
-
-            const result = window.compiler.compileAndRun(source, inputValues);
-            const elapsed = (performance.now() - startTime).toFixed(1);
-
-            // Phase 1: Tokens
-            if (result.tokens) {
-                consolePanel.log(`▸ Lexical Analysis — ${result.tokens.length} tokens`, 'dim');
-                visualizer.renderTokens(result.tokens);
-            }
-
-            // Phase 2: AST
-            if (result.ast) {
-                consolePanel.log('▸ Parsing — syntax tree built', 'dim');
-                visualizer.renderAST(result.ast);
-            }
-
-            // Phase 3: Bytecode
-            if (result.bytecode) {
-                consolePanel.log(`▸ Compilation — ${result.bytecode.length} instructions`, 'dim');
-                visualizer.renderBytecode(result.bytecode, result.semanticInfo);
-            }
-
-            // Phase 4: Execution
-            if (result.execution) {
-                consolePanel.log('▸ Execution', 'dim');
-
-                // Print outputs
-                result.execution.outputs.forEach(val => {
-                    consolePanel.log(String(val), 'output');
-                });
-
-                visualizer.renderExecution(result.execution);
-                visualizer.switchTab('execution');
-
-                consolePanel.log('', 'dim');
-                consolePanel.log(`✓ Done in ${elapsed}ms (${result.execution.stepCount} steps, depth ${result.execution.maxRecursionDepth})`, 'success');
-
-                compileBtn.className = 'compile-btn success';
-                statusText.textContent = `Done (${elapsed}ms)`;
-            }
-
-            // Error handling
-            if (result.error) {
-                consolePanel.log('', 'dim');
-                consolePanel.log(`✗ ${result.error.message}`, 'error');
-
-                if (result.error.line > 0) {
-                    editor.setErrorLine(result.error.line);
+        // Use requestAnimationFrame to ensure UI repaints before running
+        requestAnimationFrame(() => {
+            try {
+                // Verify the compiler bridge is available
+                if (!window.compiler) {
+                    consolePanel.log('✗ Compiler bridge missing. Preload failed.', 'error');
+                    consolePanel.log('  Open DevTools (Ctrl+Shift+I) to see errors.', 'dim');
+                    compileBtn.className = 'compile-btn error';
+                    statusText.textContent = 'Error';
+                    return;
                 }
 
+                if (!window.compiler.ready) {
+                    // compileAndRun still exists but will return an error message
+                    consolePanel.log('✗ Compiler modules failed to load.', 'error');
+                    consolePanel.log('  Open DevTools (Ctrl+Shift+I) to see which module failed.', 'dim');
+                    compileBtn.className = 'compile-btn error';
+                    statusText.textContent = 'Error';
+                    return;
+                }
+
+                const startTime = performance.now();
+                const jsonStr = window.compiler.compileAndRun(source, JSON.stringify(inputValues));
+                const result = JSON.parse(jsonStr);
+                const elapsed = (performance.now() - startTime).toFixed(1);
+
+                if (!result) {
+                    consolePanel.log('✗ Compiler returned no result.', 'error');
+                    compileBtn.className = 'compile-btn error';
+                    statusText.textContent = 'Error';
+                    return;
+                }
+
+                // Phase 1: Tokens
+                if (result.tokens) {
+                    consolePanel.log(`▸ Lexical Analysis — ${result.tokens.length} tokens`, 'dim');
+                    visualizer.renderTokens(result.tokens);
+                }
+
+                // Phase 2: AST
+                if (result.ast) {
+                    consolePanel.log('▸ Parsing — syntax tree built', 'dim');
+                    visualizer.renderAST(result.ast);
+                }
+
+                // Phase 3: Bytecode
+                if (result.bytecode) {
+                    consolePanel.log(`▸ Compilation — ${result.bytecode.length} instructions`, 'dim');
+                    visualizer.renderBytecode(result.bytecode, result.semanticInfo);
+                }
+
+                // Phase 4: Execution
+                if (result.execution) {
+                    consolePanel.log('▸ Execution', 'dim');
+
+                    // Print outputs
+                    result.execution.outputs.forEach(val => {
+                        consolePanel.log(String(val), 'output');
+                    });
+
+                    visualizer.renderExecution(result.execution);
+                    visualizer.switchTab('execution');
+
+                    consolePanel.log('', 'dim');
+                    consolePanel.log(`✓ Done in ${elapsed}ms (${result.execution.stepCount} steps, depth ${result.execution.maxRecursionDepth})`, 'success');
+
+                    compileBtn.className = 'compile-btn success';
+                    statusText.textContent = `Done (${elapsed}ms)`;
+                }
+
+                // Compile-phase error handling
+                if (result.error) {
+                    consolePanel.log('', 'dim');
+                    consolePanel.log(`✗ ${result.error.message}`, 'error');
+
+                    if (result.error.line > 0) {
+                        editor.setErrorLine(result.error.line);
+                    }
+
+                    compileBtn.className = 'compile-btn error';
+                    statusText.textContent = 'Error';
+                }
+
+                // Reset button after delay
+                setTimeout(() => {
+                    compileBtn.className = 'compile-btn';
+                    if (!result.error) statusText.textContent = 'Ready';
+                }, result.error ? 3000 : 2000);
+
+            } catch (err) {
+                // Catch any unexpected JS errors so the UI never gets stuck
+                consolePanel.log('', 'dim');
+                consolePanel.log(`✗ Internal error: ${err.message}`, 'error');
+                console.error('Compile error:', err);
                 compileBtn.className = 'compile-btn error';
                 statusText.textContent = 'Error';
+                setTimeout(() => {
+                    compileBtn.className = 'compile-btn';
+                }, 3000);
             }
-
-            // Reset button after delay
-            setTimeout(() => {
-                compileBtn.className = 'compile-btn';
-                if (!result.error) statusText.textContent = 'Ready';
-            }, result.error ? 3000 : 2000);
-
-        }, 30);
+        });
     }
 
     function updateFileName(filePath) {

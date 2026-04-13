@@ -9,3 +9,8 @@ desktop/node_modules/
 desktop/dist/
 desktop/out/
 package-lock.json
+desktop/package-lock.json
+
+# Build artifacts
+desktop/build/icon.ico
+desktop/build/icon.png

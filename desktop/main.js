@@ -20,6 +20,7 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
+            sandbox: false,
         },
         icon: path.join(__dirname, 'renderer', 'icon.png'),
     });
@@ -76,7 +77,11 @@ ipcMain.handle('file:save', async (_, { path: filePath, content }) => {
 });
 
 ipcMain.handle('file:loadExample', async (_, name) => {
-    const testsDir = path.join(__dirname, '..', 'tests');
+    // In dev: tests/ is sibling to desktop/
+    // In production: tests/ is in extraResources
+    const devDir = path.join(__dirname, '..', 'tests');
+    const prodDir = path.join(process.resourcesPath, 'tests');
+    const testsDir = fs.existsSync(devDir) ? devDir : prodDir;
     const filePath = path.join(testsDir, name);
     if (fs.existsSync(filePath)) {
         return { path: filePath, content: fs.readFileSync(filePath, 'utf8') };
