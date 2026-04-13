@@ -28,18 +28,24 @@
             {
                 "from": "../tests",
                 "to": "tests",
-                "filter": ["**/*.c"]
+                "filter": [
+                    "**/*.c"
+                ]
             }
         ],
         "win": {
             "target": [
                 {
                     "target": "nsis",
-                    "arch": ["x64"]
+                    "arch": [
+                        "x64"
+                    ]
                 },
                 {
                     "target": "portable",
-                    "arch": ["x64"]
+                    "arch": [
+                        "x64"
+                    ]
                 }
             ],
             "icon": "build/icon.ico",
@@ -61,7 +67,7 @@
     },
     "devDependencies": {
         "electron": "^35.0.0",
-        "electron-builder": "^26.0.12",
+        "electron-builder": "^26.8.1",
         "png-to-ico": "^3.0.1",
         "png2icons": "^2.0.1",
         "sharp": "^0.34.1"
