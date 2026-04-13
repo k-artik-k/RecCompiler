@@ -1,0 +1,69 @@
+{
+    "name": "reccompiler-desktop",
+    "version": "2.0.0",
+    "description": "RecCompiler — Mini C Compiler with Recursion Visualization",
+    "main": "main.js",
+    "scripts": {
+        "start": "electron .",
+        "dev": "electron . --dev",
+        "build-icon": "node build-icon.js",
+        "dist": "electron-builder --win",
+        "dist:portable": "electron-builder --win portable"
+    },
+    "author": "Kartik",
+    "license": "MIT",
+    "build": {
+        "appId": "com.kartik.reccompiler",
+        "productName": "RecCompiler",
+        "directories": {
+            "output": "dist"
+        },
+        "files": [
+            "main.js",
+            "preload.js",
+            "compiler/**/*",
+            "renderer/**/*"
+        ],
+        "extraResources": [
+            {
+                "from": "../tests",
+                "to": "tests",
+                "filter": ["**/*.c"]
+            }
+        ],
+        "win": {
+            "target": [
+                {
+                    "target": "nsis",
+                    "arch": ["x64"]
+                },
+                {
+                    "target": "portable",
+                    "arch": ["x64"]
+                }
+            ],
+            "icon": "build/icon.ico",
+            "artifactName": "RecCompiler-${version}-Setup.${ext}"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "installerIcon": "build/icon.ico",
+            "uninstallerIcon": "build/icon.ico",
+            "installerHeaderIcon": "build/icon.ico",
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true,
+            "shortcutName": "RecCompiler"
+        },
+        "portable": {
+            "artifactName": "RecCompiler-${version}-Portable.${ext}"
+        }
+    },
+    "devDependencies": {
+        "electron": "^35.0.0",
+        "electron-builder": "^26.0.12",
+        "png-to-ico": "^3.0.1",
+        "png2icons": "^2.0.1",
+        "sharp": "^0.34.1"
+    }
+}
